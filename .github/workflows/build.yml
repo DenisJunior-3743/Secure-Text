@@ -65,11 +65,25 @@ jobs:
           mkdir dist_upload
           copy dist\\main.exe dist_upload\\SecureText-${{ matrix.arch }}.exe
 
+      - name: Add README for ZIP
+        run: |
+          echo "SecureTextApp" > dist_upload\\README.txt
+          echo "Version: ${{ needs.version.outputs.tag }}" >> dist_upload\\README.txt
+          echo "Architecture: ${{ matrix.arch }}" >> dist_upload\\README.txt
+          echo "Built automatically via GitHub Actions" >> dist_upload\\README.txt
+          echo "" >> dist_upload\\README.txt
+          echo "Thank you for using SecureText 💾" >> dist_upload\\README.txt
+
+      - name: Zip Release Files
+        run: powershell Compress-Archive -Path dist_upload\\* -DestinationPath SecureText-${{ matrix.arch }}.zip
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: SecureText-${{ matrix.arch }}
-          path: dist_upload/SecureText-${{ matrix.arch }}.exe
+          path: |
+            dist_upload/SecureText-${{ matrix.arch }}.exe
+            SecureText-${{ matrix.arch }}.zip
 
   release:
     needs: [build, version]
@@ -86,14 +100,21 @@ jobs:
           tag_name: ${{ needs.version.outputs.tag }}
           name: "SecureText ${{ needs.version.outputs.tag }}"
           body: |
-            🚀 Auto-built SecureText release  
-            Includes executables for 64-bit and 32-bit Windows.  
+            🚀 **SecureText Auto-Build Release**
+
+            Includes ready-to-use executables and zipped portable versions for both 64-bit and 32-bit Windows.
 
             🔽 Downloads:
-            - SecureText-x64.exe
-            - SecureText-x86.exe
+            - SecureText-x64.exe  
+            - SecureText-x86.exe  
+            - SecureText-x64.zip  
+            - SecureText-x86.zip
+
+            _Built automatically via GitHub Actions._
           files: |
             artifacts/**/SecureText-x64.exe
             artifacts/**/SecureText-x86.exe
+            artifacts/**/SecureText-x64.zip
+            artifacts/**/SecureText-x86.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
