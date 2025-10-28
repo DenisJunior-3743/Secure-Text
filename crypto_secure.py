@@ -376,3 +376,67 @@ if __name__ == "__main__":
             print("\n✓ Encryption/Decryption successful!")
         else:
             print("\n✗ Error: Decrypted text doesn't match original")
+
+
+
+
+# ======= Images and Videos decryption =======
+
+import os
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+
+def encrypt_file(password, input_path, output_path=None):
+    """
+    Encrypt any binary file (image, video, etc.) and save it as .enc.
+    """
+    try:
+        if not os.path.exists(input_path):
+            raise FileNotFoundError("File not found!")
+
+        with open(input_path, "rb") as f:
+            data = f.read()
+
+        salt = get_random_bytes(16)
+        key = SecureCrypto.derive_key(password, salt)
+        cipher = AES.new(key, AES.MODE_GCM)
+        ciphertext, tag = cipher.encrypt_and_digest(data)
+
+        # If user didn't specify an output path, append .enc
+        if not output_path:
+            output_path = input_path + ".enc"
+
+        with open(output_path, "wb") as f:
+            [f.write(x) for x in (salt, cipher.nonce, tag, ciphertext)]
+
+        return output_path
+    except Exception as e:
+        raise Exception(f"File encryption failed: {e}")
+
+
+def decrypt_file(password, input_path, output_path=None):
+    """
+    Decrypt an encrypted binary file (.enc) and restore it.
+    Automatically removes the .enc extension if output_path not given.
+    """
+    try:
+        with open(input_path, "rb") as f:
+            salt, nonce, tag, ciphertext = [f.read(x) for x in (16, 16, 16, -1)]
+
+        key = SecureCrypto.derive_key(password, salt)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        data = cipher.decrypt_and_verify(ciphertext, tag)
+
+        # Restore original extension if none given
+        if not output_path:
+            if input_path.endswith(".enc"):
+                output_path = input_path[:-4]  # remove .enc
+            else:
+                output_path = input_path + ".decrypted"
+
+        with open(output_path, "wb") as f:
+            f.write(data)
+
+        return output_path
+    except Exception as e:
+        raise Exception(f"File decryption failed: {e}")

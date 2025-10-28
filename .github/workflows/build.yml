@@ -51,17 +51,32 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # Match the runtime used locally (3.13) so packaged binary is compatible
+          python-version: "3.13"
           architecture: ${{ matrix.arch }}
 
-      - name: Install dependencies
+      - name: Install build & runtime dependencies
         run: |
           python -m pip install --upgrade pip
+          # Install pyinstaller (build tool) + runtime deps used by the app
           pip install pyinstaller
+          # Install project runtime requirements (pygame listed in requirements.txt)
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          # Ensure cryptography dependency (PyCryptodome) and Pillow are present
+          pip install pycryptodome pillow
 
       - name: Build SecureText Executable
         run: |
-          pyinstaller --onefile --noconsole main.py --icon=app.ico
+          # Hidden imports to help PyInstaller detect dynamic imports used by crypto and PIL
+          $HIDDEN = '--hidden-import=Crypto.Cipher --hidden-import=Crypto.Random --hidden-import=Crypto.Util --hidden-import=PIL.Image --hidden-import=PIL.ImageTk'
+
+          # If icon exists include it, otherwise omit to avoid failure
+          if (Test-Path 'app.ico') {
+            pyinstaller --onefile --noconsole main.py --icon=app.ico $HIDDEN
+          } else {
+            pyinstaller --onefile --noconsole main.py $HIDDEN
+          }
+
           mkdir dist_upload
           copy dist\\main.exe dist_upload\\SecureText-${{ matrix.arch }}.exe
 
