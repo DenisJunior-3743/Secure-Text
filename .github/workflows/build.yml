@@ -8,14 +8,17 @@ on:
 
 jobs:
   version:
+    name: 🔢 Bump Version Tag
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.bump.outputs.new_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # important so we can read all tags
 
-      - name: Get latest tag
+      - name: Get Latest Tag
         id: get_tag
         run: |
           TAG=$(git tag --sort=-v:refname | head -n 1)
@@ -25,7 +28,7 @@ jobs:
             echo "latest_tag=$TAG" >> $GITHUB_OUTPUT
           fi
 
-      - name: Bump version automatically
+      - name: Bump Version Automatically
         id: bump
         run: |
           latest_tag="${{ steps.get_tag.outputs.latest_tag }}"
@@ -38,7 +41,17 @@ jobs:
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
           echo "Next version: $new_tag"
 
+      - name: Push New Tag to GitHub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push origin ${{ steps.bump.outputs.new_tag }}
+
   build:
+    name: 🏗️ Build Windows Executables
     needs: version
     runs-on: windows-latest
     strategy:
@@ -51,32 +64,24 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          # Match the runtime used locally (3.13) so packaged binary is compatible
           python-version: "3.13"
           architecture: ${{ matrix.arch }}
 
-      - name: Install build & runtime dependencies
+      - name: Install Build & Runtime Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install pyinstaller (build tool) + runtime deps used by the app
           pip install pyinstaller
-          # Install project runtime requirements (pygame listed in requirements.txt)
           if (Test-Path requirements.txt) { pip install -r requirements.txt }
-          # Ensure cryptography dependency (PyCryptodome) and Pillow are present
           pip install pycryptodome pillow
 
       - name: Build SecureText Executable
         run: |
-          # Hidden imports to help PyInstaller detect dynamic imports used by crypto and PIL
           $HIDDEN = '--hidden-import=Crypto.Cipher --hidden-import=Crypto.Random --hidden-import=Crypto.Util --hidden-import=PIL.Image --hidden-import=PIL.ImageTk'
-
-          # If icon exists include it, otherwise omit to avoid failure
           if (Test-Path 'app.ico') {
             pyinstaller --onefile --noconsole main.py --icon=app.ico $HIDDEN
           } else {
             pyinstaller --onefile --noconsole main.py $HIDDEN
           }
-
           mkdir dist_upload
           copy dist\\main.exe dist_upload\\SecureText-${{ matrix.arch }}.exe
 
@@ -101,19 +106,28 @@ jobs:
             SecureText-${{ matrix.arch }}.zip
 
   release:
-    needs: [build, version]
+    name: 🚀 Publish GitHub Release
+    needs: [version, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Download Artifacts
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
+          pattern: SecureText-*  # download both x64 and x86
+
+      - name: Debug Artifact Listing
+        run: ls -R ./artifacts
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
           name: "SecureText ${{ needs.version.outputs.tag }}"
+          draft: false
+          prerelease: false
           body: |
             🚀 **SecureText Auto-Build Release**
 
@@ -126,10 +140,6 @@ jobs:
             - SecureText-x86.zip
 
             _Built automatically via GitHub Actions._
-          files: |
-            artifacts/**/SecureText-x64.exe
-            artifacts/**/SecureText-x86.exe
-            artifacts/**/SecureText-x64.zip
-            artifacts/**/SecureText-x86.zip
+          files: ./artifacts/**/*  # match all built artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
